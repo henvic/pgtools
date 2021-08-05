@@ -1,0 +1,41 @@
+name: Integration
+on:
+  pull_request:
+    types: [opened, synchronize, reopened, ready_for_review]
+  push:
+    branches:
+      - main
+jobs:
+  # Reference: https://docs.github.com/en/actions/guides/creating-postgresql-service-containers
+  postgres-test:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres
+        env:
+          POSTGRES_USER: runner
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: test_database
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+        ports:
+          # Maps tcp port 5432 on service container to the host
+          - 5432:5432
+    env:
+      PGHOST: localhost
+      PGPASSWORD: postgres
+      PGDATABASE: test_database
+    steps:
+    - uses: actions/checkout@v1
+    - uses: actions/setup-go@v1
+      with:
+        go-version: '1.16.x'
+    - name: Run Postgres tests
+      run: go test -v -race -covermode atomic -coverprofile=profile.cov -count 1 -p 1 -tags=integration ./...
+    - name: Code coverage
+      uses: shogo82148/actions-goveralls@v1
+      with:
+        path-to-profile: profile.cov
