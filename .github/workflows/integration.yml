@@ -36,6 +36,7 @@ jobs:
     - name: Run Postgres tests
       run: go test -v -race -covermode atomic -coverprofile=profile.cov -count 1 -p 1 -tags=integration ./...
     - name: Code coverage
+      if: ${{ github.event_name != 'pull_request' }}
       uses: shogo82148/actions-goveralls@v1
       with:
         path-to-profile: profile.cov
