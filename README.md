@@ -100,40 +100,22 @@ In this case, we want to write everything manually so that PostgreSQL doesn't tr
 
 For now, it's better to avoid using `pgtools.Wildcard()` for JOINs altogether, even when it seems to work fine.
 
-### sqltest.Migration
-You can use `sqltest.Migration` to write tests using Postgres implementation more effectively.
+### pgtools/sqltest package
+You can use `sqltest.Migration` to write integration tests using PostgreSQL more effectively.
+
+Check the [example package](sqltest/example) for usage.
 
 ```go
-func TestPostgres(t *testing.T) {
-	ctx := context.Background()
-	migration := sqltest.New(t, sqltest.Options{Force: force, Path: "testdata/migrations"})
-	conn := migration.Setup(ctx, "") // Using environment variables instead of connString to configure tests.
-
-	db := &Database{
-		Postgres: conn,
-	}
-
-	// Run each test sequentially.
-	// Please don't use t.Parallel() here to reduce the risk of wasting time due to side-effects,
-	// unless we later try it, and it turns out to be a great idea.
-	var tests = []struct {
-		name string
-		f    func(t *testing.T, db *Database)
-	}{
-		{"feature", testFeature},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			tt.f(t, db)
-		})
-	}
-}
+ctx := context.Background()
+	migration := sqltest.New(t, sqltest.Options{
+		Force: force,
+		Path:  "testdata/migrations",
+	})
+	conn := migration.Setup(ctx, "")
 ```
-
 The path indicates where your SQL migration files created for use with [tern](https://github.com/jackc/tern) live.
 
-Example of tern migration file `003_posts.sql`:
+Example of a tern migration file `003_posts.sql`:
 
 ```sql
 CREATE TABLE posts (
@@ -151,15 +133,20 @@ DROP TABLE IF EXISTS posts;
 To effectively work with tests that use PostgreSQL, you'll want to run your tests with a command like:
 
 ```sh
-go test -v -race -count 1 -p 1 -tags=integration ./...
+go test -v -race -count 1 -tags=integration ./...
 ```
 
 * `-race` to pro-actively avoid race conditions
 * `-count 1` to disable test caching
-* `-p 1` to limit to one test execution at a time for multiple packages and avoid concurrency issues that might persist despite not using `t.Parallel()`
-* `-tags=integration` or a build environment to opt-in for Postgres-related tests
+* `-tags=integration` or a build environment variable to opt-in for Postgres-related tests (there are different advantages and fallbacks)
 
-If you use environment variables to connect to the database with tools like psql or tern, you're already good to go once you create a database for testing starting with the prefix `test_`.
+Multiple packages might have test functions with the same name, which might result in clashes if you're executing go test with list mode (example: `go test ./...`).
+Using `t.Parallel()` doesn't have an effect in this case, and you have two choices:
+
+* Set the field `Options.TemporaryDatabasePrefix` to a unique value.
+* Limit execution to one test at a time for multiple packages with `-p 1`.
+
+If you use environment variables to connect to the database with tools like psql or tern, you're already good to go once you create a database for testing starting with the prefix `test`.
 
 We use GitHub Actions for running your integration tests with Postgres in a Continuous Integration (CI) environment.
 You can find our workflow in [.github/workflows/integration.yml](.github/workflows/integration.yml).
