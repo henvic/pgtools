@@ -3,9 +3,11 @@ package sqltest
 
 import (
 	"context"
+	"fmt"
 	"strings"
 	"testing"
 
+	"github.com/jackc/pgx/v4"
 	"github.com/jackc/pgx/v4/pgxpool"
 	"github.com/jackc/tern/migrate"
 )
@@ -13,7 +15,7 @@ import (
 var (
 	// DatabasePrefix defines a prefix for the database name.
 	// It is used to mitigate the risk of running migration and tests on the wrong database.
-	DatabasePrefix = "test_"
+	DatabasePrefix = "test"
 
 	// SchemaVersionTable where tern saves the version of the current migration in PostgreSQL.
 	SchemaVersionTable = "schema_version"
@@ -39,6 +41,15 @@ type Options struct {
 	// a proper cleaning up. To forcefully clean up the database, you can use the force option.
 	SkipTeardown bool
 
+	// UseExisting database from connection instead of creating a temporary one.
+	// If set, the database isn't dropped after the tests.
+	UseExisting bool
+
+	// TemporaryDatabasePrefix for namespacing the temporary database name created for the test function.
+	// Useful if you're running multiple tests in parallel to avoid flaky tests due to naming clashes.
+	// Ignore if using UseExisting.
+	TemporaryDatabasePrefix string
+
 	// Path to the migration files.
 	Path string
 }
@@ -50,6 +61,10 @@ type Migration struct {
 
 	t        testing.TB
 	migrator *migrate.Migrator
+
+	pool     *pgxpool.Pool
+	conn     *pgx.Conn
+	database string
 }
 
 // Setup the migration.
@@ -58,6 +73,8 @@ type Migration struct {
 //
 // It register the Teardown function with testing.TB to clean up the database once the
 // tests are over by default, but this can be disabled by setting the SkipTeardown option.
+//
+// If the UseExisting option is set, a temporary database is used for running the tests.
 //
 // If you're using PostgreSQL environment variables, you should pass an empty string as the
 // connection string, as in:
@@ -74,61 +91,51 @@ func (m *Migration) Setup(ctx context.Context, connString string) *pgxpool.Pool 
 	}
 
 	m.t.Helper()
+	m.t.Log("setup PostgreSQL database")
+
 	// Similarly to how it's done in the application code, pgxpool is used to create a pool
 	// of connections to the database that is safe to be used concurrently.
-	//
-	// However, it's still wise to avoid running concurrent tests.
-	// In other words, please don't use t.Parallel() in your tests.
-	// Also, use -p 1 whenever running tests on multiple packages with ./...
-	pool, err := pgxpool.Connect(ctx, connString)
+	poolConfig, err := pgxpool.ParseConfig(connString)
+	if err != nil {
+		m.t.Fatal(err)
+	}
+
+	if !m.Options.UseExisting {
+		var err error
+		if m.conn, err = pgx.Connect(ctx, connString); err != nil {
+			m.t.Fatal(err)
+		}
+		m.database = m.Options.TemporaryDatabasePrefix + SQLTestName(m.t)
+		// Lousy check if database name is invalid.
+		// Ref: https://www.postgresql.org/docs/current/sql-syntax-lexical.html#SQL-SYNTAX-IDENTIFIERS
+		if strings.ContainsAny(m.database, `" `) {
+			m.t.Fatalf("invalid database name")
+		}
+
+		if err := m.cleanDB(ctx, connString); err != nil {
+			m.t.Fatalf("cannot create database: %v", err)
+		}
+
+		poolConfig.ConnConfig.Database = m.database
+	}
+	m.pool, err = pgxpool.ConnectConfig(ctx, poolConfig)
 	if err != nil {
 		m.t.Fatalf("cannot connect to database: %v", err)
 	}
 
-	conn, err := pool.Acquire(ctx)
+	poolConn, err := m.pool.Acquire(ctx)
 	if err != nil {
-		m.t.Fatalf("cannot acquire Postgres connection: %v", err)
+		m.t.Fatalf("cannot acquire PostgreSQL connection: %v", err)
 	}
-	defer conn.Release()
+	defer poolConn.Release()
 
-	var database string
-	if err := conn.QueryRow(ctx, "SELECT current_database();").Scan(&database); err != nil {
+	if err := poolConn.QueryRow(ctx, "SELECT current_database();").Scan(&m.database); err != nil {
 		m.t.Fatalf("cannot get database name: %v", err)
 	}
 
-	// Enforce database name to start with "test_" to reduce the risk of us messing something up (example: due to environment variables).
-	if !strings.HasPrefix(database, DatabasePrefix) {
-		m.t.Fatalf(`refusing to run integration tests: database name is %q (%q prefix is required)`, database, DatabasePrefix)
-	}
-
-	m.migrator, err = migrate.NewMigrator(ctx, conn.Conn(), SchemaVersionTable)
-	if err != nil {
-		m.t.Fatalf("cannot run migration: %v", err)
-	}
-
-	m.migrator.OnStart = func(sequence int32, name, direction, sql string) {
-		m.t.Logf("executing %s %s\n", name, direction)
-	}
-
-	// Test the migration scripts and prepare database for integration tests.
-	m.t.Log("setup PostgreSQL database")
-	if err := m.migrator.LoadMigrations(m.Options.Path); err != nil {
-		m.t.Fatalf("cannot load migrations: %v", err)
-	}
-
-	// Check if the database seems to be in a reliable state.
-	if !m.Options.Force {
-		switch version, err := m.migrator.GetCurrentVersion(ctx); {
-		case err != nil:
-			m.t.Fatalf("cannot get schema version: %v", err)
-		case version != 0:
-			m.t.Fatalf("database is dirty, please fix %q table manually or try -force", SchemaVersionTable)
-		}
-	}
-
-	// Undo database migrations.
-	if err := m.migrator.MigrateTo(ctx, 0); err != nil {
-		m.t.Fatalf("cannot undo database migrations: %v", err)
+	// Enforce database name to start with "test" to mitigate risk of modifying wrong database by mistake.
+	if !strings.HasPrefix(m.database, DatabasePrefix) {
+		m.t.Fatalf(`refusing to run integration tests: database name is %q (%q prefix is required)`, m.database, DatabasePrefix)
 	}
 
 	if !m.Options.SkipTeardown {
@@ -136,12 +143,48 @@ func (m *Migration) Setup(ctx context.Context, connString string) *pgxpool.Pool 
 			m.Teardown(context.Background())
 		})
 	}
+	if err := m.migrate(ctx, poolConn); err != nil {
+		m.t.Fatal(err)
+	}
+	return m.pool
+}
+
+// migrate database using tern.
+func (m *Migration) migrate(ctx context.Context, poolConn *pgxpool.Conn) (err error) {
+	m.migrator, err = migrate.NewMigrator(ctx, poolConn.Conn(), SchemaVersionTable)
+	if err != nil {
+		return fmt.Errorf("cannot run migration: %w", err)
+	}
+
+	m.migrator.OnStart = func(sequence int32, name, direction, sql string) {
+		m.t.Logf("executing %s %s\n", name, direction)
+	}
+
+	// Test the migration scripts and prepare database for integration tests.
+	if err := m.migrator.LoadMigrations(m.Options.Path); err != nil {
+		return fmt.Errorf("cannot load migrations: %w", err)
+	}
+
+	// Check if the database seems to be in a reliable state.
+	if !m.Options.Force {
+		switch version, err := m.migrator.GetCurrentVersion(ctx); {
+		case err != nil:
+			return fmt.Errorf("cannot get schema version: %w", err)
+		case version != 0:
+			return fmt.Errorf("database is dirty, please fix %q table manually or try -force", SchemaVersionTable)
+		}
+	}
+
+	// Undo database migrations.
+	if err := m.migrator.MigrateTo(ctx, 0); err != nil {
+		return fmt.Errorf("cannot undo database migrations: %v", err)
+	}
 
 	// Migrate to latest version of the database
 	if err := m.migrator.Migrate(ctx); err != nil {
-		m.t.Fatalf("cannot apply migrations: %v", err)
+		return fmt.Errorf("cannot apply migrations: %v", err)
 	}
-	return pool
+	return nil
 }
 
 // Teardown database after running the tests.
@@ -155,4 +198,38 @@ func (m *Migration) Teardown(ctx context.Context) {
 	if err := m.migrator.MigrateTo(ctx, 0); err != nil {
 		m.t.Fatalf("cannot tear down database migrations: %v", err)
 	}
+	m.pool.Close()
+
+	if !m.Options.UseExisting {
+		defer m.conn.Close(ctx)
+		if err := m.dropDB(ctx); err != nil {
+			m.t.Fatalf("cannot drop database: %v", err)
+		}
+	}
+}
+
+// cleanDB creates a temporary database when CleanDB is used.
+func (m *Migration) cleanDB(ctx context.Context, connString string) error {
+	// If force is set to true, drop database if it exists.
+	if m.Options.Force {
+		if err := m.dropDB(ctx); err != nil {
+			return err
+		}
+	}
+
+	// Create new database.
+	_, err := m.conn.Exec(ctx, fmt.Sprintf(`CREATE DATABASE "%s";`, m.database))
+	return err
+}
+
+// dropDB drops the created temporary database.
+func (m *Migration) dropDB(ctx context.Context) error {
+	_, err := m.conn.Exec(ctx, fmt.Sprintf(`DROP DATABASE IF EXISTS "%s";`, m.database))
+	return err
+}
+
+// SQLTestName normalizes a test name to a database name.
+// It lowercases the test name and converts / to underscore.
+func SQLTestName(t testing.TB) string {
+	return strings.ToLower(strings.ReplaceAll(t.Name(), "/", "_"))
 }
