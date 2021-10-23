@@ -1,20 +1,21 @@
-package sqltest_test
+package postgres
 
 import (
 	"context"
 
 	"github.com/jackc/pgconn"
 	"github.com/jackc/pgx/v4"
+	"github.com/jackc/pgx/v4/pgxpool"
 )
 
-// PGXInterface is a limited interface with high-level API for pgx methods safe to be used in high-level business logic packages.
+// PGX limited interface with high-level API for pgx methods safe to be used in high-level business logic packages.
 // It is satisfied by implementations *pgx.Conn and *pgxpool.Pool (and you should probably use the second one usually).
 //
 // Caveat: It doesn't expose a method to acquire a *pgx.Conn or handle notifications,
 // so it's not compatible with LISTEN/NOTIFY.
 //
-// pgx reference: https://pkg.go.dev/github.com/jackc/pgx/v4
-type PGXInterface interface {
+// Reference: https://pkg.go.dev/github.com/jackc/pgx/v4
+type PGX interface {
 	// Begin starts a transaction. Unlike database/sql, the context only affects the begin command. i.e. there is no
 	// auto-rollback on context cancellation.
 	Begin(ctx context.Context) (pgx.Tx, error)
@@ -69,3 +70,9 @@ type PGXInterface interface {
 	// is used again.
 	SendBatch(ctx context.Context, b *pgx.Batch) pgx.BatchResults
 }
+
+// Validate if the PGX interface was derived from *pgx.Conn and *pgxpool.Pool correctly.
+var (
+	_ PGX = (*pgx.Conn)(nil)
+	_ PGX = (*pgxpool.Pool)(nil)
+)

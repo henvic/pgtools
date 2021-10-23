@@ -1,75 +1,220 @@
+//go:build integration
 // +build integration
 
-// This test file has two purposes:
-// 1. Serve as an implementation example.
-// 2. Test the package.
-//
-// NOTE: Please notice this file is using build tags, and to be executed you need to use
-// 	go build -tags integration .
-//
-// If you've this on multiple packages and want to avoid caching, use:
-// 	go test -v -race -count 1 -p 1 -tags=integration ./...
 package sqltest_test
 
 import (
+	"bytes"
 	"context"
 	"flag"
+	"fmt"
+	"io/ioutil"
+	"os"
+	"os/exec"
+	"reflect"
+	"strings"
 	"testing"
+	"time"
 
 	"github.com/hatch-studio/pgtools/sqltest"
-	"github.com/jackc/pgx/v4/pgxpool"
+	"github.com/jackc/pgx/v4"
 )
 
-var force bool
+var force = flag.Bool("force", false, "Force cleaning the database before starting")
 
-func init() {
-	flag.BoolVar(&force, "force", false, "Force cleaning the database")
-}
-
-// Database should live on your application code.
-//
-// Alternatively, you can copy the interface_test.go file contents, and use the following code
-// to delimit a high-level API fox pgx methods:
-// 	type Database struct {
-// 		Postgres PGXInterface
-// 	}
-//
-// By using this interface you can restrict access to pgx configuration and low-level APIs in
-// your business logic packages.
-type Database struct {
-	// Postgres connection.
-	Postgres *pgxpool.Pool
-}
-
-func TestMigration(t *testing.T) {
+func TestNow(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
-	migration := sqltest.New(t, sqltest.Options{Force: force, Path: "testdata/migrations"})
+	migration := sqltest.New(t, sqltest.Options{
+		Force: *force,
+		Path:  "example/testdata/migrations",
+
+		// If we don't use a prefix, the test will be flaky when testing multi packages
+		// because there is another TestNow function in example/example_test.go.
+		TemporaryDatabasePrefix: "test_internal_",
+	})
 	conn := migration.Setup(ctx, "") // Using environment variables instead of connString to configure tests.
-
-	db := &Database{
-		Postgres: conn,
+	var tt time.Time
+	if err := conn.QueryRow(ctx, "SELECT NOW();").Scan(&tt); err != nil {
+		t.Errorf("cannot execute query: %v", err)
 	}
-
-	// Run each test sequentially.
-	// Please don't use t.Parallel() here to reduce the risk of wasting time due to side-effects,
-	// unless we later try it, and it turns out to be a great idea.
-	var tests = []struct {
-		name string
-		f    func(t *testing.T, db *Database)
-	}{
-		{"feature", testFeature},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			tt.f(t, db)
-		})
+	if tt.IsZero() {
+		t.Error("time returned by pgx is zero")
 	}
 }
 
-// testFeature implements your integration tests.
-// As the purpose of this is to document the migration process itself, it's a "no-op".
-// Avoid t.Parallel() for your own sake.
-func testFeature(t *testing.T, db *Database) {
-	// Test a functionality here.
+func TestPrefixedDatabase(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+	migration := sqltest.New(t, sqltest.Options{
+		Force:                   *force,
+		Path:                    "example/testdata/migrations",
+		TemporaryDatabasePrefix: "test_must_have_prefix_",
+	})
+	conn := migration.Setup(ctx, "") // Using environment variables instead of connString to configure tests.
+	var got string
+	if err := conn.QueryRow(ctx, "SELECT current_database();").Scan(&got); err != nil {
+		t.Errorf("cannot get database name: %v", err)
+	}
+	if want := "test_must_have_prefix_testprefixeddatabase"; want != got {
+		t.Errorf("got %q, wanted %q", got, want)
+	}
+}
+
+var checkMigrationInvalidPath = flag.Bool("check_migration_invalid_path", false, "if true, TestMigrationInvalidPath should fail.")
+
+func TestMigrationInvalidPath(t *testing.T) {
+	if *checkMigrationInvalidPath {
+		ctx := context.Background()
+		migration := sqltest.New(t, sqltest.Options{Force: *force, Path: "testdata/invalid", UseExisting: true})
+		migration.Setup(ctx, "")
+		return
+	}
+
+	args := []string{
+		"-test.v",
+		"-test.run=TestMigrationInvalidPath",
+		"-check_migration_invalid_path",
+	}
+	if *force {
+		args = append(args, "-force")
+	}
+	out, err := exec.Command(os.Args[0], args...).CombinedOutput()
+	if err == nil {
+		t.Error("expected command to fail")
+	}
+	if want := []byte("cannot load migrations: open testdata/invalid: no such file or directory"); !bytes.Contains(out, want) {
+		t.Errorf("got %q, wanted %q", out, want)
+	}
+}
+
+// Check what happens if there is a dirty migration.
+var checkMigrationDirty = flag.Bool("check_migration_dirty", false, "if true, TestMigrationDirty should fail.")
+
+func TestMigrationDirty(t *testing.T) {
+	if *checkMigrationDirty {
+		ctx := context.Background()
+		migration := sqltest.New(t, sqltest.Options{Path: "example/testdata/migrations", UseExisting: true})
+		migration.Setup(ctx, "")
+		return
+	}
+
+	// Prepare clean environment.
+	ctx := context.Background()
+	migration := sqltest.New(t, sqltest.Options{Force: *force, Path: "example/testdata/migrations", UseExisting: true})
+	conn := migration.Setup(ctx, "")
+
+	// Check if the migration version matches with the number of migration files.
+	entries, err := ioutil.ReadDir("example/testdata/migrations")
+	if err != nil {
+		t.Errorf("cannot read migrations dir: %v", err)
+	}
+	var migrations int
+	for _, f := range entries {
+		if strings.HasSuffix(f.Name(), ".sql") {
+			migrations++
+		}
+	}
+
+	// Let's update the schema_version to make it dirty, and verify we are unable to run the tests.
+	if _, err := conn.Exec(context.Background(), "UPDATE schema_version SET version = $1 WHERE version = $2", migrations+1, migrations); err != nil {
+		t.Errorf("cannot update migration version: %q", err)
+	}
+
+	args := []string{
+		"-test.v",
+		"-test.run=TestMigrationDirty",
+		"-check_migration_dirty",
+	}
+	if *force {
+		args = append(args, "-force")
+	}
+	out, err := exec.Command(os.Args[0], args...).CombinedOutput()
+	if err == nil {
+		t.Error("expected command to fail")
+	}
+	want := []byte(`database is dirty, please fix "schema_version" table manually or try -force`)
+	if !bytes.Contains(out, want) {
+		t.Errorf("got %q, wanted %q", out, want)
+	}
+
+	// Manually reset migration version to be able to test again to after the first 'legit' migration:
+	if _, err := conn.Exec(context.Background(), "UPDATE schema_version SET version = $1", migrations); err != nil {
+		t.Errorf("cannot update migration version: %q", err)
+	}
+}
+
+var checkExistingTemporaryDB = flag.Bool("check_existing_temporary_db", false, "if true, ExistingTemporaryDB should fail.")
+
+func TestExistingTemporaryDB(t *testing.T) {
+	t.Parallel()
+	if *checkExistingTemporaryDB {
+		ctx := context.Background()
+		migration := sqltest.New(t, sqltest.Options{Path: "example/testdata/migrations"})
+		migration.Setup(ctx, "")
+		return
+	}
+
+	// Prepare clean environment.
+	ctx := context.Background()
+	conn, err := pgx.Connect(context.Background(), "")
+	if err != nil {
+		t.Fatalf("connection error: %v", err)
+	}
+
+	testDB := sqltest.SQLTestName(t)
+	_, err = conn.Exec(ctx, fmt.Sprintf(`CREATE DATABASE "%s";`, testDB))
+	if err != nil {
+		t.Fatalf("cannot create database: %v", err)
+	}
+	defer func() {
+		conn.Exec(ctx, fmt.Sprintf(`DROP DATABASE IF EXISTS "%s";`, testDB))
+	}()
+
+	args := []string{
+		"-test.v",
+		"-test.run=TestExistingTemporaryDB",
+		"-check_existing_temporary_db",
+	}
+	if *force {
+		args = append(args, "-force")
+	}
+	out, err := exec.Command(os.Args[0], args...).CombinedOutput()
+	if err == nil {
+		t.Error("expected command to fail")
+	}
+	want := []byte(`cannot create database: ERROR: database "testexistingtemporarydb" already exists`)
+	if !bytes.Contains(out, want) {
+		t.Errorf("got %q, wanted %q", out, want)
+	}
+}
+
+func TestMigrationUninitialized(t *testing.T) {
+	t.Parallel()
+	defer func() {
+		want := "migration must be initialized with sqltest.New()"
+		if r := recover(); r == nil || r != want {
+			t.Errorf("wanted panic %q, got %v instead", want, r)
+		}
+	}()
+	m := &sqltest.Migration{}
+	m.Setup(context.Background(), "")
+}
+
+func TestSQLTestName(t *testing.T) {
+	t.Parallel()
+	var want = []string{
+		"testsqltestname_foo",
+		"testsqltestname_foo_bar",
+	}
+	var got []string
+	t.Run("foo", func(t *testing.T) {
+		got = append(got, sqltest.SQLTestName(t))
+		t.Run("bar", func(t *testing.T) {
+			got = append(got, sqltest.SQLTestName(t))
+		})
+	})
+	if !reflect.DeepEqual(got, want) {
+		t.Errorf("got %q, want %q", got, want)
+	}
 }
