@@ -114,6 +114,11 @@ type HasPointerNestedMock struct {
 	ModifiedAt time.Time
 }
 
+type themeImplicit struct {
+	ID  string
+	XYZ Theme `db:",json"`
+}
+
 func TestWildcard(t *testing.T) {
 	t.Parallel()
 	var uninitializedPointer *jsonMock
@@ -259,6 +264,11 @@ func TestWildcard(t *testing.T) {
 			}{},
 			desc: "RegularFieldWithDots",
 			want: `"regular.field.with.dots" as "regular.field.with.dots"`,
+		},
+		{
+			v:    themeImplicit{},
+			desc: "implicit",
+			want: `"id","xyz"`,
 		},
 	}
 	for _, tc := range testCases {

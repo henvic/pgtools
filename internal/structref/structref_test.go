@@ -14,6 +14,10 @@ func TestGetColumnToFieldIndexMap(t *testing.T) {
 	type Embed struct {
 		Play bool
 	}
+	type embedImplicit struct {
+		ID  string
+		XYZ Embed `db:",json"`
+	}
 	tests := []struct {
 		name string
 		v    interface{}
@@ -79,6 +83,14 @@ func TestGetColumnToFieldIndexMap(t *testing.T) {
 				"renamed":      {1},
 				"renamed.id":   {1, 0},
 				"renamed.name": {1, 1},
+			},
+		},
+		{
+			name: "implicit",
+			v:    embedImplicit{},
+			want: map[string][]int{
+				"id":  {0},
+				"xyz": {1},
 			},
 		},
 	}

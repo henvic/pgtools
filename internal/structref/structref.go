@@ -57,7 +57,7 @@ func GetColumnToFieldIndexMap(structType reflect.Type) map[string][]int {
 			index = append(index, field.Index...)
 
 			columnPart := dbTag
-			if !dbTagPresent {
+			if !dbTagPresent || columnPart == "" {
 				columnPart = toSnakeCase(field.Name)
 			}
 
