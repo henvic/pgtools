@@ -1,5 +1,5 @@
 # pgtools
-[![GoDoc](https://godoc.org/github.com/hatch-studio/pgtools?status.svg)](https://godoc.org/github.com/hatch-studio/pgtools) [![Build Status](https://github.com/hatch-studio/pgtools/workflows/Tests/badge.svg)](https://github.com/hatch-studio/pgtools/actions?query=workflow%3ATests) [![Coverage Status](https://coveralls.io/repos/hatch-studio/pgtools/badge.svg)](https://coveralls.io/r/hatch-studio/pgtools)
+[![GoDoc](https://godoc.org/github.com/hatch-studio/pgtools?status.svg)](https://godoc.org/github.com/hatch-studio/pgtools) [![Build Status](https://github.com/hatch-studio/pgtools/workflows/Tests/badge.svg)](https://github.com/hatch-studio/pgtools/actions?query=workflow%3ATests)
 
 pgtools contains features [HATCH Studio](https://hatchstudio.co/) developed and rely upon to use PostgreSQL more effectively with [Go](https://golang.org/).
 
