@@ -42,7 +42,7 @@ type Options struct {
 	SkipTeardown bool
 
 	// UseExisting database from connection instead of creating a temporary one.
-	// If set, the database isn't dropped after the tests.
+	// If set, the database isn't dropped during teardown / test cleanup.
 	UseExisting bool
 
 	// TemporaryDatabasePrefix for namespacing the temporary database name created for the test function.
