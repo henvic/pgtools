@@ -101,7 +101,7 @@ func TestMigrationDirty(t *testing.T) {
 
 	// Prepare clean environment.
 	ctx := context.Background()
-	migration := sqltest.New(t, sqltest.Options{Force: *force, Path: "example/testdata/migrations", UseExisting: true})
+	migration := sqltest.New(t, sqltest.Options{Force: *force, Path: "example/testdata/migrations"})
 	conn := migration.Setup(ctx, "")
 
 	// Check if the migration version matches with the number of migration files.
@@ -129,7 +129,9 @@ func TestMigrationDirty(t *testing.T) {
 	if *force {
 		args = append(args, "-force")
 	}
-	out, err := exec.Command(os.Args[0], args...).CombinedOutput()
+	cmd := exec.Command(os.Args[0], args...)
+	cmd.Env = append(os.Environ(), "PGDATABASE="+sqltest.SQLTestName(t))
+	out, err := cmd.CombinedOutput()
 	if err == nil {
 		t.Error("expected command to fail")
 	}
