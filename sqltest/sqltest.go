@@ -189,16 +189,12 @@ func (m *Migration) migrate(ctx context.Context, poolConn *pgxpool.Conn) (err er
 }
 
 // Teardown database after running the tests.
-// This function is registered by Setup to be called automatically by the testing package
-// during testing cleanup.
 //
-// In case this is not called, you can use the Force option to reset the database.
+// This function is registered by Setup to be called automatically by the testing package
+// during testing cleanup. Use the SkipTeardown option to disable this.
 func (m *Migration) Teardown(ctx context.Context) {
 	m.t.Helper()
 	m.t.Log("teardown PostgreSQL database")
-	if err := m.migrator.MigrateTo(ctx, 0); err != nil {
-		m.t.Fatalf("cannot tear down database migrations: %v", err)
-	}
 	m.pool.Close()
 
 	if !m.Options.UseExisting {
