@@ -86,6 +86,19 @@ type Migration struct {
 // Reference for using connString:
 // https://www.postgresql.org/docs/current/libpq-connect.html#LIBPQ-CONNSTRING
 func (m *Migration) Setup(ctx context.Context, connString string) *pgxpool.Pool {
+	return m.setupVersion(ctx, connString, nil)
+}
+
+// SetupVersion of the migrations is similar to the Setup version,
+// but migrates to the given target version.
+func (m *Migration) SetupVersion(ctx context.Context, connString string, targetVersion int32) *pgxpool.Pool {
+	return m.setupVersion(ctx, connString, &targetVersion)
+}
+
+// setupVersion is only used to avoid receiving targetVersion as a pointer in the exported function.
+// If targetVersion isn't passed, it migrates to the latest migration, which is only known after
+// migrate.NewMigrator is called.
+func (m *Migration) setupVersion(ctx context.Context, connString string, targetVersion *int32) *pgxpool.Pool {
 	if m.t == nil {
 		panic("migration must be initialized with sqltest.New()")
 	}
@@ -143,14 +156,14 @@ func (m *Migration) Setup(ctx context.Context, connString string) *pgxpool.Pool 
 			m.Teardown(context.Background())
 		})
 	}
-	if err := m.migrate(ctx, poolConn); err != nil {
+	if err := m.migrate(ctx, poolConn, targetVersion); err != nil {
 		m.t.Fatal(err)
 	}
 	return m.pool
 }
 
 // migrate database using tern.
-func (m *Migration) migrate(ctx context.Context, poolConn *pgxpool.Conn) (err error) {
+func (m *Migration) migrate(ctx context.Context, poolConn *pgxpool.Conn, targetVersion *int32) (err error) {
 	m.migrator, err = migrate.NewMigrator(ctx, poolConn.Conn(), SchemaVersionTable)
 	if err != nil {
 		return fmt.Errorf("cannot run migration: %w", err)
@@ -181,11 +194,26 @@ func (m *Migration) migrate(ctx context.Context, poolConn *pgxpool.Conn) (err er
 		return fmt.Errorf("cannot undo database migrations: %v", err)
 	}
 
-	// Migrate to latest version of the database
-	if err := m.migrator.Migrate(ctx); err != nil {
+	// Migrate to the latest or target version of the database.
+	tv := int32(len(m.migrator.Migrations))
+	if targetVersion != nil {
+		tv = *targetVersion
+	}
+	if err := m.migrator.MigrateTo(ctx, tv); err != nil {
 		return fmt.Errorf("cannot apply migrations: %v", err)
 	}
 	return nil
+}
+
+// MigrateTo migrates to targetVersion.
+//
+// You probably only need this if you need to test code against an older version of your database,
+// or if you are testing a migration process.
+func (m *Migration) MigrateTo(ctx context.Context, targetVersion int32) {
+	m.t.Helper()
+	if err := m.migrator.MigrateTo(ctx, targetVersion); err != nil {
+		m.t.Fatalf("cannot migrate database to version %d: %v", targetVersion, err)
+	}
 }
 
 // Teardown database after running the tests.
