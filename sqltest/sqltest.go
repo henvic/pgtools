@@ -166,12 +166,13 @@ func (m *Migration) migrate(ctx context.Context, poolConn *pgxpool.Conn) (err er
 	}
 
 	// Check if the database seems to be in a reliable state.
+	// If the database current version is ahead of existing migrations, refuse to overwrite it.
 	if !m.Options.Force {
 		switch version, err := m.migrator.GetCurrentVersion(ctx); {
 		case err != nil:
 			return fmt.Errorf("cannot get schema version: %w", err)
-		case version != 0:
-			return fmt.Errorf("database is dirty, please fix %q table manually or try -force", SchemaVersionTable)
+		case int(version) > len(m.migrator.Migrations):
+			return fmt.Errorf("database is dirty (current version is ahead of existing migrations), please fix %q table manually or try -force", SchemaVersionTable)
 		}
 	}
 

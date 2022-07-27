@@ -115,8 +115,8 @@ func TestMigrationDirty(t *testing.T) {
 			migrations++
 		}
 	}
-
-	// Let's update the schema_version to make it dirty, and verify we are unable to run the tests.
+	// Let's update the schema_version to make it ahead of the current version,
+	// and verify we are unable to run the tests.
 	if _, err := conn.Exec(context.Background(), "UPDATE schema_version SET version = $1 WHERE version = $2", migrations+1, migrations); err != nil {
 		t.Errorf("cannot update migration version: %q", err)
 	}
@@ -133,7 +133,7 @@ func TestMigrationDirty(t *testing.T) {
 	if err == nil {
 		t.Error("expected command to fail")
 	}
-	want := []byte(`database is dirty, please fix "schema_version" table manually or try -force`)
+	want := []byte(`database is dirty (current version is ahead of existing migrations), please fix "schema_version" table manually or try -force`)
 	if !bytes.Contains(out, want) {
 		t.Errorf("got %q, wanted %q", out, want)
 	}
