@@ -1,9 +1,10 @@
 # pgtools
-[![GoDoc](https://godoc.org/github.com/hatch-studio/pgtools?status.svg)](https://godoc.org/github.com/hatch-studio/pgtools) [![Build Status](https://github.com/hatch-studio/pgtools/workflows/Tests/badge.svg)](https://github.com/hatch-studio/pgtools/actions?query=workflow%3ATests)
+[![GoDoc](https://godoc.org/github.com/henvic/pgtools?status.svg)](https://godoc.org/github.com/henvic/pgtools) [![Build Status](https://github.com/henvic/pgtools/workflows/Tests/badge.svg)](https://github.com/henvic/pgtools/actions?query=workflow%3ATests)
 
-pgtools contains features [HATCH Studio](https://hatchstudio.co/) developed and rely upon to use PostgreSQL more effectively with [Go](https://golang.org/).
+pgtools contains features you can rely upon to use PostgreSQL more effectively with [Go](https://golang.org/).
+Originally developed at [HATCH Studio](https://hatchstudio.co/) / [Stitch](https://www.stitch3d.com/) for making working with [pgx](https://github.com/jackc/pgx/) easier.
 
-Please see the [official documentation](https://godoc.org/github.com/hatch-studio/pgtools) or source code for more details.
+Please see the [official documentation](https://godoc.org/github.com/henvic/pgtools) or source code for more details.
 
 ## Features
 ### pgtools.Wildcard
