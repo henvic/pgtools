@@ -11,7 +11,7 @@ jobs:
     strategy:
         matrix:
           os: [ubuntu-latest]
-          go: [1.17.x, 1.16.x, 1.15.x] # when adding a newer latest, update it below too.
+          go: [1.19.x, 1.18.x] # when adding a newer latest, update it below too.
     runs-on: ${{ matrix.os }}
     services:
       postgres:
@@ -29,6 +29,7 @@ jobs:
           # Maps tcp port 5432 on service container to the host
           - 5432:5432
     env:
+      INTEGRATION_TESTDB: true
       PGHOST: localhost
       PGPASSWORD: postgres
       PGDATABASE: test_database
@@ -38,9 +39,9 @@ jobs:
       with:
         go-version: ${{ matrix.go }}
     - name: Run Postgres tests
-      run: go test -v -race -covermode atomic -coverprofile=profile.cov -count 5 -tags=integration ./...
+      run: go test -v -race -covermode atomic -coverprofile=profile.cov -count 5 ./...
     - name: Code coverage
-      if: ${{ github.event_name != 'pull_request' }}
+      if: ${{ github.event_name != 'pull_request' && matrix.go == '1.19.x' }}
       uses: shogo82148/actions-goveralls@v1
       with:
         path-to-profile: profile.cov
