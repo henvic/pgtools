@@ -109,7 +109,7 @@ Check the [example package](sqltest/example) for usage.
 ctx := context.Background()
 	migration := sqltest.New(t, sqltest.Options{
 		Force: force,
-		Path:  "testdata/migrations",
+		Files:  os.DirFS("testdata/migrations"),
 	})
 	conn := migration.Setup(ctx, "")
 ```

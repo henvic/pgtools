@@ -8,7 +8,6 @@ import (
 	"context"
 	"flag"
 	"fmt"
-	"io/ioutil"
 	"os"
 	"os/exec"
 	"reflect"
@@ -27,7 +26,7 @@ func TestNow(t *testing.T) {
 	ctx := context.Background()
 	migration := sqltest.New(t, sqltest.Options{
 		Force: *force,
-		Path:  "example/testdata/migrations",
+		Files: os.DirFS("example/testdata/migrations"),
 
 		// If we don't use a prefix, the test will be flaky when testing multi packages
 		// because there is another TestNow function in example/example_test.go.
@@ -48,7 +47,7 @@ func TestPrefixedDatabase(t *testing.T) {
 	ctx := context.Background()
 	migration := sqltest.New(t, sqltest.Options{
 		Force:                   *force,
-		Path:                    "example/testdata/migrations",
+		Files:                   os.DirFS("example/testdata/migrations"),
 		TemporaryDatabasePrefix: "test_must_have_prefix_",
 	})
 	conn := migration.Setup(ctx, "") // Using environment variables instead of connString to configure tests.
@@ -66,7 +65,11 @@ var checkMigrationInvalidPath = flag.Bool("check_migration_invalid_path", false,
 func TestMigrationInvalidPath(t *testing.T) {
 	if *checkMigrationInvalidPath {
 		ctx := context.Background()
-		migration := sqltest.New(t, sqltest.Options{Force: *force, Path: "testdata/invalid", UseExisting: true})
+		migration := sqltest.New(t, sqltest.Options{
+			Force:       *force,
+			Files:       os.DirFS("testdata/invalid"),
+			UseExisting: true,
+		})
 		migration.Setup(ctx, "")
 		return
 	}
@@ -83,7 +86,7 @@ func TestMigrationInvalidPath(t *testing.T) {
 	if err == nil {
 		t.Error("expected command to fail")
 	}
-	if want := []byte("cannot load migrations: open testdata/invalid: no such file or directory"); !bytes.Contains(out, want) {
+	if want := []byte("no such file or directory"); !bytes.Contains(out, want) {
 		t.Errorf("got %q, wanted %q", out, want)
 	}
 }
@@ -94,18 +97,24 @@ var checkMigrationDirty = flag.Bool("check_migration_dirty", false, "if true, Te
 func TestMigrationDirty(t *testing.T) {
 	if *checkMigrationDirty {
 		ctx := context.Background()
-		migration := sqltest.New(t, sqltest.Options{Path: "example/testdata/migrations", UseExisting: true})
+		migration := sqltest.New(t, sqltest.Options{
+			Files:       os.DirFS("example/testdata/migrations"),
+			UseExisting: true,
+		})
 		migration.Setup(ctx, "")
 		return
 	}
 
 	// Prepare clean environment.
 	ctx := context.Background()
-	migration := sqltest.New(t, sqltest.Options{Force: *force, Path: "example/testdata/migrations"})
+	migration := sqltest.New(t, sqltest.Options{
+		Force: *force,
+		Files: os.DirFS("example/testdata/migrations"),
+	})
 	conn := migration.Setup(ctx, "")
 
 	// Check if the migration version matches with the number of migration files.
-	entries, err := ioutil.ReadDir("example/testdata/migrations")
+	entries, err := os.ReadDir("example/testdata/migrations")
 	if err != nil {
 		t.Errorf("cannot read migrations dir: %v", err)
 	}
@@ -152,7 +161,9 @@ func TestExistingTemporaryDB(t *testing.T) {
 	t.Parallel()
 	if *checkExistingTemporaryDB {
 		ctx := context.Background()
-		migration := sqltest.New(t, sqltest.Options{Path: "example/testdata/migrations"})
+		migration := sqltest.New(t, sqltest.Options{
+			Files: os.DirFS("example/testdata/migrations"),
+		})
 		migration.Setup(ctx, "")
 		return
 	}

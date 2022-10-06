@@ -4,6 +4,7 @@ package sqltest
 import (
 	"context"
 	"fmt"
+	"io/fs"
 	"strings"
 	"testing"
 
@@ -50,8 +51,9 @@ type Options struct {
 	// Ignore if using UseExisting.
 	TemporaryDatabasePrefix string
 
-	// Path to the migration files.
-	Path string
+	// Files to use in the migration.
+	// e.g., os.DirFS("migrations/")
+	Files fs.FS
 }
 
 // Migration simplifies avlidadting the migration process, and setting up a test database
@@ -175,7 +177,7 @@ func (m *Migration) migrate(ctx context.Context, poolConn *pgxpool.Conn, targetV
 	}
 
 	// Test the migration scripts and prepare database for integration tests.
-	if err := m.migrator.LoadMigrations(m.Options.Path); err != nil {
+	if err := m.migrator.LoadMigrations(m.Options.Files); err != nil {
 		return fmt.Errorf("cannot load migrations: %w", err)
 	}
 

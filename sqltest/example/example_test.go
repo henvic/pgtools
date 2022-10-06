@@ -20,7 +20,7 @@ func TestNow(t *testing.T) {
 	ctx := context.Background()
 	migration := sqltest.New(t, sqltest.Options{
 		Force: *force,
-		Path:  "testdata/migrations",
+		Files: os.DirFS("testdata/migrations"),
 	})
 	conn := migration.Setup(ctx, "") // Using environment variables instead of connString to configure tests.
 
@@ -41,7 +41,7 @@ func TestMigrationSubtests(t *testing.T) {
 	ctx := context.Background()
 	migration := sqltest.New(t, sqltest.Options{
 		Force: *force,
-		Path:  "testdata/migrations",
+		Files: os.DirFS("testdata/migrations"),
 	})
 	conn := migration.Setup(ctx, "") // Using environment variables instead of connString to configure tests.
 
