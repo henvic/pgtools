@@ -1,5 +1,5 @@
 // Package pgtools contains features HATCH Studio developed and rely upon to use PostgreSQL more effectively with Go.
-// It was designed to be used alongside github.com/jackc/pgx and github.com/georgysavva/scany.
+// It was designed to be used alongside github.com/jackc/pgx or github.com/georgysavva/scany.
 package pgtools
 
 import (
@@ -27,8 +27,8 @@ import (
 // a wildcard (*) is used for convenience in SELECT queries.
 //
 // See example for usage.
-// It was envisioned to use with github.com/georgysavva/scany, but you can
-// use it without it too.
+// It was first envisioned to use with github.com/georgysavva/scany, but you can
+// use it without it too. Since pg v5, you might want to use pgx.CollectOneRow and pgx.CollectRows.
 //
 // If you're curious about doing this "in the other direction", see
 // https://github.com/golang/pkgsite/blob/2d3ade3c90634f9afed7aa772e53a62bb433447a/internal/database/reflect.go#L20-L46

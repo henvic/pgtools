@@ -22,7 +22,7 @@ CREATE TABLE user {
 }
 ```
 
-You might want to create a struct to map it like the following for use with [scany](https://github.com/georgysavva/scany).
+You might want to create a struct to map it like the following for use with [pgx.CollectOneRow](https://pkg.go.dev/github.com/jackc/pgx/v5#CollectOneRow) and [pgx.CollectRows](https://pkg.go.dev/github.com/jackc/pgx/v5#CollectRows) from pgx v5. If you're using pgx v4, you can use it with [scany](https://github.com/georgysavva/scany).
 
 ```go
 type User struct {
