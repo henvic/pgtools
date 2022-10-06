@@ -3,9 +3,9 @@ package postgres
 import (
 	"context"
 
-	"github.com/jackc/pgconn"
-	"github.com/jackc/pgx/v4"
-	"github.com/jackc/pgx/v4/pgxpool"
+	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgconn"
+	"github.com/jackc/pgx/v5/pgxpool"
 )
 
 // PGX limited interface with high-level API for pgx methods safe to be used in high-level business logic packages.
@@ -14,7 +14,7 @@ import (
 // Caveat: It doesn't expose a method to acquire a *pgx.Conn or handle notifications,
 // so it's not compatible with LISTEN/NOTIFY.
 //
-// Reference: https://pkg.go.dev/github.com/jackc/pgx/v4
+// Reference: https://pkg.go.dev/github.com/jackc/pgx/v5
 type PGX interface {
 	// Begin starts a transaction. Unlike database/sql, the context only affects the begin command. i.e. there is no
 	// auto-rollback on context cancellation.
@@ -23,17 +23,6 @@ type PGX interface {
 	// BeginTx starts a transaction with txOptions determining the transaction mode. Unlike database/sql, the context only
 	// affects the begin command. i.e. there is no auto-rollback on context cancellation.
 	BeginTx(ctx context.Context, txOptions pgx.TxOptions) (pgx.Tx, error)
-
-	// BeginFunc starts a transaction and calls f. If f does not return an error the transaction is committed. If f returns
-	// an error the transaction is rolled back. The context will be used when executing the transaction control statements
-	// (BEGIN, ROLLBACK, and COMMIT) but does not otherwise affect the execution of f.
-	BeginFunc(ctx context.Context, f func(pgx.Tx) error) error
-
-	// BeginTxFunc starts a transaction with txOptions determining the transaction mode and calls f. If f does not return
-	// an error the transaction is committed. If f returns an error the transaction is rolled back. The context will be
-	// used when executing the transaction control statements (BEGIN, ROLLBACK, and COMMIT) but does not otherwise affect
-	// the execution of f.
-	BeginTxFunc(ctx context.Context, txOptions pgx.TxOptions, f func(pgx.Tx) error) error
 
 	// CopyFrom uses the PostgreSQL copy protocol to perform bulk data insertion.
 	// It returns the number of rows copied and an error.
@@ -45,25 +34,32 @@ type PGX interface {
 
 	// Exec executes sql. sql can be either a prepared statement name or an SQL string. arguments should be referenced
 	// positionally from the sql string as $1, $2, etc.
-	Exec(ctx context.Context, sql string, arguments ...interface{}) (pgconn.CommandTag, error)
+	Exec(ctx context.Context, sql string, arguments ...any) (pgconn.CommandTag, error)
 
-	// Query executes sql with args. If there is an error the returned Rows will be returned in an error state. So it is
-	// allowed to ignore the error returned from Query and handle it in Rows.
+	// Query sends a query to the server and returns a Rows to read the results. Only errors encountered sending the query
+	// and initializing Rows will be returned. Err() on the returned Rows must be checked after the Rows is closed to
+	// determine if the query executed successfully.
 	//
-	// For extra control over how the query is executed, the types QuerySimpleProtocol, QueryResultFormats, and
+	// The returned Rows must be closed before the connection can be used again. It is safe to attempt to read from the
+	// returned Rows even if an error is returned. The error will be the available in rows.Err() after rows are closed. It
+	// is allowed to ignore the error returned from Query and handle it in Rows.
+	//
+	// It is possible for a query to return one or more rows before encountering an error. In most cases the rows should be
+	// collected before processing rather than processed while receiving each row. This avoids the possibility of the
+	// application processing rows from a query that the server rejected. The CollectRows function is useful here.
+	//
+	// An implementor of QueryRewriter may be passed as the first element of args. It can rewrite the sql and change or
+	// replace args. For example, NamedArgs is QueryRewriter that implements named arguments.
+	//
+	// For extra control over how the query is executed, the types QueryExecMode, QueryResultFormats, and
 	// QueryResultFormatsByOID may be used as the first args to control exactly how the query is executed. This is rarely
 	// needed. See the documentation for those types for details.
-	Query(ctx context.Context, sql string, args ...interface{}) (pgx.Rows, error)
-
-	// QueryFunc executes sql with args. For each row returned by the query the values will scanned into the elements of
-	// scans and f will be called. If any row fails to scan or f returns an error the query will be aborted and the error
-	// will be returned.
-	QueryFunc(ctx context.Context, sql string, args []interface{}, scans []interface{}, f func(pgx.QueryFuncRow) error) (pgconn.CommandTag, error)
+	Query(ctx context.Context, sql string, args ...any) (pgx.Rows, error)
 
 	// QueryRow is a convenience wrapper over Query. Any error that occurs while
 	// querying is deferred until calling Scan on the returned Row. That Row will
 	// error with ErrNoRows if no rows are returned.
-	QueryRow(ctx context.Context, sql string, args ...interface{}) pgx.Row
+	QueryRow(ctx context.Context, sql string, args ...any) pgx.Row
 
 	// SendBatch sends all queued queries to the server at once. All queries are run in an implicit transaction unless
 	// explicit transaction control statements are executed. The returned BatchResults must be closed before the connection

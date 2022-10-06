@@ -20,7 +20,7 @@ func TestGetColumnToFieldIndexMap(t *testing.T) {
 	}
 	tests := []struct {
 		name string
-		v    interface{}
+		v    any
 		want map[string][]int
 	}{
 		{

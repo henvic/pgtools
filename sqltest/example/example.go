@@ -6,8 +6,8 @@ import (
 	"log"
 	"time"
 
-	"github.com/hatch-studio/pgtools/sqltest/example/internal/postgres"
-	"github.com/jackc/pgx/v4/pgxpool"
+	"github.com/henvic/pgtools/sqltest/example/internal/postgres"
+	"github.com/jackc/pgx/v5/pgxpool"
 )
 
 // Database layer for your application.
@@ -26,7 +26,7 @@ func (db *Database) Now(ctx context.Context) (time.Time, error) {
 }
 
 func main() {
-	pool, err := pgxpool.Connect(context.Background(), "")
+	pool, err := pgxpool.New(context.Background(), "")
 	if err != nil {
 		log.Fatal(err)
 	}

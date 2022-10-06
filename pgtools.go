@@ -9,7 +9,7 @@ import (
 	"strings"
 	"sync"
 
-	"github.com/hatch-studio/pgtools/internal/structref"
+	"github.com/henvic/pgtools/internal/structref"
 )
 
 // Wildcard returns an expression that can be used for querying a
@@ -32,7 +32,7 @@ import (
 //
 // If you're curious about doing this "in the other direction", see
 // https://github.com/golang/pkgsite/blob/2d3ade3c90634f9afed7aa772e53a62bb433447a/internal/database/reflect.go#L20-L46
-func Wildcard(v interface{}) string {
+func Wildcard(v any) string {
 	elems := Fields(v)
 	// Logic below based on strings.Join, but avoids column ambiguity.
 	if len(elems) == 0 {
@@ -84,7 +84,7 @@ var wildcardsCache = &lru{
 //
 // To avoid ambiguity issues, it's important to use the Wildcard function instead of
 // calling strings.Join(pgtools.Field(v), ", ") to generate the query expression.
-func Fields(v interface{}) []string {
+func Fields(v any) []string {
 	// Get the right type.
 	if v == nil {
 		return nil

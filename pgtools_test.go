@@ -7,7 +7,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/hatch-studio/pgtools"
+	"github.com/henvic/pgtools"
 )
 
 type User struct {
@@ -123,7 +123,7 @@ func TestWildcard(t *testing.T) {
 	t.Parallel()
 	var uninitializedPointer *jsonMock
 	testCases := []struct {
-		v    interface{}
+		v    any
 		desc string
 		want string
 	}{

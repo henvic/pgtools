@@ -1,5 +1,6 @@
 MIT License
 
+Copyright (c) 2022 Henrique Vicente de Oliveira Pinto
 Copyright (c) 2021 HATCH Studio
 
 Permission is hereby granted, free of charge, to any person obtaining a copy

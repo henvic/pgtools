@@ -21,7 +21,7 @@ func TestWildcardCache(t *testing.T) {
 	}
 
 	mocks := []struct {
-		v           interface{}
+		v           any
 		want        string
 		cachedItems int
 	}{

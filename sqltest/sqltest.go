@@ -7,9 +7,9 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/jackc/pgx/v4"
-	"github.com/jackc/pgx/v4/pgxpool"
-	"github.com/jackc/tern/migrate"
+	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/jackc/tern/v2/migrate"
 )
 
 var (
@@ -78,7 +78,8 @@ type Migration struct {
 //
 // If you're using PostgreSQL environment variables, you should pass an empty string as the
 // connection string, as in:
-// 	pool := m.Setup(context.Background(), "")
+//
+//	pool := m.Setup(context.Background(), "")
 //
 // Reference for configuring the PostgreSQL client with environment variables:
 // https://www.postgresql.org/docs/current/libpq-envars.html
@@ -131,7 +132,7 @@ func (m *Migration) setupVersion(ctx context.Context, connString string, targetV
 
 		poolConfig.ConnConfig.Database = m.database
 	}
-	m.pool, err = pgxpool.ConnectConfig(ctx, poolConfig)
+	m.pool, err = pgxpool.NewWithConfig(ctx, poolConfig)
 	if err != nil {
 		m.t.Fatalf("cannot connect to database: %v", err)
 	}

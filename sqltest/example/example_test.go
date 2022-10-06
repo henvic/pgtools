@@ -11,7 +11,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/hatch-studio/pgtools/sqltest"
+	"github.com/henvic/pgtools/sqltest"
 )
 
 var force = flag.Bool("force", false, "Force cleaning the database before starting")
