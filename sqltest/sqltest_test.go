@@ -1,6 +1,3 @@
-//go:build integration
-// +build integration
-
 package sqltest_test
 
 import (
@@ -8,6 +5,7 @@ import (
 	"context"
 	"flag"
 	"fmt"
+	"log"
 	"os"
 	"os/exec"
 	"reflect"
@@ -18,6 +16,14 @@ import (
 	"github.com/henvic/pgtools/sqltest"
 	"github.com/jackc/pgx/v5"
 )
+
+func TestMain(m *testing.M) {
+	if os.Getenv("INTEGRATION_TESTDB") != "true" {
+		log.Printf("Skipping tests that require database connection")
+		return
+	}
+	os.Exit(m.Run())
+}
 
 var force = flag.Bool("force", false, "Force cleaning the database before starting")
 

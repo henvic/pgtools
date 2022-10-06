@@ -1,18 +1,23 @@
-//go:build integration
-// +build integration
-
-// To run these tests, you can use the following command:
-// $ go test -tags integration -v
 package main
 
 import (
 	"context"
 	"flag"
+	"log"
+	"os"
 	"testing"
 	"time"
 
 	"github.com/henvic/pgtools/sqltest"
 )
+
+func TestMain(m *testing.M) {
+	if os.Getenv("INTEGRATION_TESTDB") != "true" {
+		log.Printf("Skipping tests that require database connection")
+		return
+	}
+	os.Exit(m.Run())
+}
 
 var force = flag.Bool("force", false, "Force cleaning the database before starting")
 

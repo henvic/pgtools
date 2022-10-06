@@ -133,12 +133,12 @@ DROP TABLE IF EXISTS posts;
 To effectively work with tests that use PostgreSQL, you'll want to run your tests with a command like:
 
 ```sh
-go test -v -race -count 1 -tags=integration ./...
+INTEGRATION_TESTDB=true go test -v -race -count 1 ./...
 ```
 
 * `-race` to pro-actively avoid race conditions
 * `-count 1` to disable test caching
-* `-tags=integration` or a build environment variable to opt-in for Postgres-related tests (there are different advantages and fallbacks)
+* Use an environment variable to opt-in Postgres-related tests (see below how)
 
 Multiple packages might have test functions with the same name, which might result in clashes if you're executing go test with list mode (example: `go test ./...`).
 Using `t.Parallel()` doesn't have an effect in this case, and you have two choices:
@@ -150,6 +150,47 @@ If you use environment variables to connect to the database with tools like psql
 
 We use GitHub Actions for running your integration tests with Postgres in a Continuous Integration (CI) environment.
 You can find our workflow in [.github/workflows/integration.yml](.github/workflows/integration.yml).
+
+# Opting-in for tests using environment variable
+You can define the following function:
+
+```go
+func checkPostgres(t *testing.TB) {
+	if os.Getenv("INTEGRATION_TESTDB") != "true" {
+		t.Skip("Skipping tests that require database connection")
+	}
+}
+```
+
+Which you can call as the first argument of your tests:
+
+```go
+func TestNow(t *testing.T) {
+	checkPostgres(t)
+	// Continue test here.
+	t.Parallel()
+
+	ctx := context.Background()
+	migration := sqltest.New(t, sqltest.Options{
+		// ...
+	}
+	// ...
+}
+```
+
+If all tests on a given package requires database, you can also use:
+
+```go
+func TestMain(m *testing.M) {
+	if os.Getenv("INTEGRATION_TESTDB") != "true" {
+		log.Printf("Skipping tests that require database connection")
+		return
+	}
+	os.Exit(m.Run())
+}
+```
+
+Even if your tests typically require database, it's recommended to use such checks to provide a better developer experience to anyone when they don't need to run the database tests.
 
 ## Acknowledgements
 HATCH Studio uses the following Postgres-related software, and this work is in direct relation to them.
