@@ -1,17 +1,21 @@
 name: Tests
 on:
+  push:
+    branches: [ "main" ]
   pull_request:
     types: [opened, synchronize, reopened, ready_for_review]
-  push:
-    branches:
-      - main
+    # The branches below must be a subset of the branches above
+    branches: [ "main" ]
+permissions:
+  contents: read
+  pull-requests: read
 jobs:
   # Reference: https://docs.github.com/en/actions/guides/creating-postgresql-service-containers
-  tests:
+  test:
     strategy:
-        matrix:
-          os: [ubuntu-latest]
-          go: [1.20.x, 1.19.x] # when adding a newer latest, update it below too.
+      matrix:
+        os: [ubuntu-latest]
+        go: [1.24.x, 1.23.x] # when updating versions, update it below too.
     runs-on: ${{ matrix.os }}
     services:
       postgres:
@@ -21,6 +25,7 @@ jobs:
           POSTGRES_PASSWORD: postgres
           POSTGRES_DB: test_database
         options: >-
+          --name postgres
           --health-cmd pg_isready
           --health-interval 10s
           --health-timeout 5s
@@ -34,14 +39,14 @@ jobs:
       PGPASSWORD: postgres
       PGDATABASE: test_database
     steps:
-    - uses: actions/checkout@v1
-    - uses: actions/setup-go@v1
+    - uses: actions/checkout@v4
+    - uses: actions/setup-go@v5
       with:
         go-version: ${{ matrix.go }}
     - name: Run Postgres tests
       run: go test -v -race -covermode atomic -coverprofile=profile.cov -count 5 ./...
     - name: Code coverage
-      if: ${{ github.event_name != 'pull_request' && matrix.go == '1.20.x' }}
+      if: ${{ github.event_name != 'pull_request' && matrix.go == '1.24.x' }}
       uses: shogo82148/actions-goveralls@v1
       with:
         path-to-profile: profile.cov
