@@ -48,6 +48,25 @@ func TestNow(t *testing.T) {
 	}
 }
 
+func TestSetupVersion(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+
+	migration := sqltest.New(t, sqltest.Options{
+		Force: *force,
+		Files: os.DirFS("example/testdata/migrations"),
+	})
+	// Similar to the previous test, but we want to migrate to a specific version (2).
+	conn := migration.SetupVersion(ctx, "", 2) // Target version 2
+	var version int32
+	if err := conn.QueryRow(ctx, "SELECT version FROM schema_version").Scan(&version); err != nil {
+		t.Errorf("cannot query schema version: %v", err)
+	}
+	if version != 2 {
+		t.Errorf("got version %d, wanted %d", version, 2)
+	}
+}
+
 func TestPrefixedDatabase(t *testing.T) {
 	t.Parallel()
 	ctx := context.Background()
