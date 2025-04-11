@@ -225,7 +225,7 @@ func (m *Migration) migrate(ctx context.Context, poolConn *pgxpool.Conn, targetV
 	}
 
 	// Migrate to the latest or target version of the database.
-	tv := int32(len(m.migrator.Migrations))
+	tv := int32(len(m.migrator.Migrations)) //gosec:disable G115 -- This is a false positive
 	if targetVersion != nil {
 		tv = *targetVersion
 	}
