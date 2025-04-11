@@ -196,9 +196,14 @@ func (m *Migration) migrate(ctx context.Context, poolConn *pgxpool.Conn, targetV
 			m.t.Logf("executing %s %s", name, direction)
 		}
 	}
+
+	// NOTE(henvic): Temporary hack to avoid panic found on TestMigrationInvalidPath after
+	// updating tern from v2.7.0 to v2.7.4 due to missing check if file/directory exists.
+	// Reference: https://github.com/jackc/tern/pull/125
+	if _, err := fs.Stat(m.Options.Files, "."); err != nil {
+		return err
 	}
 
-	// Test the migration scripts and prepare database for integration tests.
 	if err := m.migrator.LoadMigrations(m.Options.Files); err != nil {
 		return fmt.Errorf("cannot load migrations: %w", err)
 	}
