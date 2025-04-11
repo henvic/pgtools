@@ -66,6 +66,9 @@ type Options struct {
 	// Implement embed.FS or use os.DirFS to load the migration files.
 	// e.g., os.DirFS("migrations/")
 	Files fs.FS
+
+	// Logs enables printing status of the migration step-by-step.
+	Logs bool
 }
 
 // Migration simplifies avlidadting the migration process, and setting up a test database
@@ -119,7 +122,9 @@ func (m *Migration) setupVersion(ctx context.Context, connString string, targetV
 	}
 
 	m.t.Helper()
-	m.t.Log("setup PostgreSQL database")
+	if m.Options.Logs {
+		m.t.Log("setup PostgreSQL database")
+	}
 
 	// Similarly to how it's done in the application code, pgxpool is used to create a pool
 	// of connections to the database that is safe to be used concurrently.
@@ -186,8 +191,11 @@ func (m *Migration) migrate(ctx context.Context, poolConn *pgxpool.Conn, targetV
 		return fmt.Errorf("cannot run migration: %w", err)
 	}
 
-	m.migrator.OnStart = func(sequence int32, name, direction, sql string) {
-		m.t.Logf("executing %s %s\n", name, direction)
+	if m.Options.Logs {
+		m.migrator.OnStart = func(sequence int32, name, direction, sql string) {
+			m.t.Logf("executing %s %s", name, direction)
+		}
+	}
 	}
 
 	// Test the migration scripts and prepare database for integration tests.
@@ -239,7 +247,9 @@ func (m *Migration) MigrateTo(ctx context.Context, targetVersion int32) {
 // during testing cleanup. Use the SkipTeardown option to disable this.
 func (m *Migration) Teardown(ctx context.Context) {
 	m.t.Helper()
-	m.t.Log("teardown PostgreSQL database")
+	if m.Options.Logs {
+		m.t.Log("teardown PostgreSQL database")
+	}
 	m.pool.Close()
 
 	if !m.Options.UseExisting {

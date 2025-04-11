@@ -254,3 +254,57 @@ func TestSQLTestName(t *testing.T) {
 		t.Errorf("got %q, want %q", got, want)
 	}
 }
+func TestMigrationLogs(t *testing.T) {
+	t.Parallel()
+
+	var (
+		logs []string
+		ran  bool
+	)
+
+	t.Run("internal", func(t *testing.T) {
+		ran = true
+		mocked := &mockLogger{
+			T:    t,
+			logs: &logs,
+		}
+
+		migration := sqltest.New(mocked, sqltest.Options{
+			Force: *force,
+			Files: os.DirFS("example/testdata/migrations"),
+			Logs:  true,
+		})
+		migration.Setup(context.Background(), "")
+	})
+	if !ran {
+		t.Skip("internal test didn't run")
+	}
+	expectedLogs := []string{
+		"setup PostgreSQL database",
+		"executing 001_media.sql up",
+		"executing 002_settings.sql up",
+		"executing 003_posts.sql up",
+		"teardown PostgreSQL database",
+	}
+	if len(logs) != len(expectedLogs) {
+		t.Errorf("expected %d log lines, but got %d", len(expectedLogs), len(logs))
+	}
+	for i, expected := range expectedLogs {
+		if !strings.Contains(logs[i], expected) {
+			t.Errorf("log line %d: expected to contain %q, but got %q", i+1, expected, logs[i])
+		}
+	}
+}
+
+type mockLogger struct {
+	*testing.T
+	logs *[]string
+}
+
+func (m *mockLogger) Log(args ...interface{}) {
+	*m.logs = append(*m.logs, fmt.Sprint(args...))
+}
+
+func (m *mockLogger) Logf(format string, args ...interface{}) {
+	*m.logs = append(*m.logs, fmt.Sprintf(format, args...))
+}
