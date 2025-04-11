@@ -102,17 +102,48 @@ In this case, we want to write everything manually so that PostgreSQL doesn't tr
 For now, it's better to avoid using `pgtools.Wildcard()` for JOINs altogether, even when it seems to work fine.
 
 ### pgtools/sqltest package
-You can use `sqltest.Migration` to write integration tests using PostgreSQL more effectively.
+You can use `sqltest.Quick` to write integration tests using PostgreSQL more conveniently, especially when using PostgreSQL's [libpq environment variables](https://www.postgresql.org/docs/current/libpq-envars.html).
 
-Check the [example package](sqltest/example) for usage.
+With Go 1.24+, create a migrations.go file where your .sql are located with the following:
+
+```go
+package migrations
+
+import "embed"
+
+//go:embed *.sql
+var Files embed.FS
+```
+
+Then, you can quickly set up a new integration tests infrastructure anywhere with:
+
+```go
+conn := sqltest.Quick(t, migrations.Files) // exposes a pgx database pool
+```
+
+Use the following for setting up a database for testing but without any migrations:
+
+```go
+conn := sqltest.Quick(t, sqltest.Empty)
+```
+
+If you can't use go:embed, you can use the following:
+
+```go
+conn := sqltest.Quick(t, os.DirFS("testdata/migrations"))
+```
+
+Check the [example package](sqltest/example) to see other usage.
+
+If you need more control or cannot set environment variables, try sqltest.Migration.
 
 ```go
 ctx := context.Background()
-	migration := sqltest.New(t, sqltest.Options{
-		Force: force,
-		Files:  os.DirFS("testdata/migrations"),
-	})
-	conn := migration.Setup(ctx, "")
+migration := sqltest.New(t, sqltest.Options{
+	Force: force,
+	Files:  os.DirFS("testdata/migrations"),
+})
+conn := migration.Setup(ctx, "")
 ```
 The path indicates where your SQL migration files created for use with [tern](https://github.com/jackc/tern) live.
 
