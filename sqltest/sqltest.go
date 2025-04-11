@@ -20,7 +20,18 @@ var (
 
 	// SchemaVersionTable where tern saves the version of the current migration in PostgreSQL.
 	SchemaVersionTable = "schema_version"
+
+	// Empty can be used for when you want a temporary database for your tests but don't need to run migrations.
+	Empty fs.FS = emptyFS{}
 )
+
+// emptyFS is a special fs.FS implementation used to symbolize empty migrations.
+type emptyFS struct{}
+
+// Open implements the fs.FS interface but always returns an error, as no files exist.
+func (e emptyFS) Open(name string) (fs.File, error) {
+	return nil, fs.ErrNotExist
+}
 
 // New migration to use with a test.
 func New(t testing.TB, o Options) *Migration {
@@ -52,6 +63,7 @@ type Options struct {
 	TemporaryDatabasePrefix string
 
 	// Files to use in the migration.
+	// Implement embed.FS or use os.DirFS to load the migration files.
 	// e.g., os.DirFS("migrations/")
 	Files fs.FS
 }
@@ -159,8 +171,10 @@ func (m *Migration) setupVersion(ctx context.Context, connString string, targetV
 			m.Teardown(context.Background())
 		})
 	}
-	if err := m.migrate(ctx, poolConn, targetVersion); err != nil {
-		m.t.Fatal(err)
+	if m.Options.Files != Empty {
+		if err := m.migrate(ctx, poolConn, targetVersion); err != nil {
+			m.t.Fatal(err)
+		}
 	}
 	return m.pool
 }

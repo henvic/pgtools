@@ -68,6 +68,23 @@ func TestPrefixedDatabase(t *testing.T) {
 
 var checkMigrationInvalidPath = flag.Bool("check_migration_invalid_path", false, "if true, TestMigrationInvalidPath should fail.")
 
+func TestMigrationEmpty(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+	migration := sqltest.New(t, sqltest.Options{
+		Force: true,
+		Files: sqltest.Empty,
+	})
+	pool := migration.Setup(ctx, "")
+	var tt time.Time
+	if err := pool.QueryRow(ctx, "SELECT NOW();").Scan(&tt); err != nil {
+		t.Errorf("cannot execute query: %v", err)
+	}
+	if tt.IsZero() {
+		t.Error("time returned by pgx is zero")
+	}
+}
+
 func TestMigrationInvalidPath(t *testing.T) {
 	if *checkMigrationInvalidPath {
 		ctx := context.Background()
