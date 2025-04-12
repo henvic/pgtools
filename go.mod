@@ -1,6 +1,8 @@
 module github.com/henvic/pgtools
 
-go 1.23.0
+go 1.23.8
+
+toolchain go1.24.2
 
 require (
 	github.com/jackc/pgx/v5 v5.7.4
