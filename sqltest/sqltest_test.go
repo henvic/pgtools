@@ -8,10 +8,10 @@ import (
 	"log"
 	"os"
 	"os/exec"
-	"reflect"
 	"strings"
 	"testing"
 	"time"
+	"unicode"
 
 	"github.com/henvic/pgtools/sqltest"
 	"github.com/jackc/pgx/v5"
@@ -258,21 +258,70 @@ func TestMigrationUninitialized(t *testing.T) {
 
 func TestSQLTestName(t *testing.T) {
 	t.Parallel()
-	var want = []string{
-		"testsqltestname_foo",
-		"testsqltestname_foo_bar",
-	}
-	var got []string
 	t.Run("foo", func(t *testing.T) {
-		got = append(got, sqltest.SQLTestName(t))
+		testSQLTestName(t, "testsqltestname__foo")
 		t.Run("bar", func(t *testing.T) {
-			got = append(got, sqltest.SQLTestName(t))
+			testSQLTestName(t, "testsqltestname__foo__bar")
+			t.Run("sub123ijk", func(t *testing.T) {
+				testSQLTestName(t, "testsqltestname__foo__bar__sub123ijk")
+			})
+			t.Run("456", func(t *testing.T) {
+				testSQLTestName(t, "testsqltestname__foo__bar__456")
+			})
+		})
+		t.Run("is_okay", func(t *testing.T) {
+			testSQLTestName(t, "testsqltestname__foo__is_okay")
+		})
+		t.Run("is_okay", func(t *testing.T) {
+			testSQLTestName(t, "testsqltestname__foo__is_okay01")
+		})
+		t.Run("SomeTh!ngisnºtWrøng", func(t *testing.T) {
+			testSQLTestName(t, "testsqltestname__foo__somethngisntwrng")
+		})
+		t.Run(`bad % naming " _shô-Úld__ still b3 f⁄_ne`, func(t *testing.T) {
+			testSQLTestName(t, "testsqltestname__foo__bad__naming___shld___still_b3_f_ne")
+		})
+		t.Run("this is a really long name for a test to check hashing", func(t *testing.T) {
+			testSQLTestName(t, "testsqltestname__foo__this_is_a_really_long_name_for_a_tes9086f")
+		})
+		t.Run("å:lot:of&symbøls", func(t *testing.T) {
+			testSQLTestName(t, "testsqltestname__foo__lotofsymbls")
 		})
 	})
-	if !reflect.DeepEqual(got, want) {
-		t.Errorf("got %q, want %q", got, want)
+}
+
+func testSQLTestName(t *testing.T, want string) {
+	got := sqltest.SQLTestName(t)
+	t.Helper()
+	if got != want {
+		t.Errorf("got %q, wanted %q", got, want)
 	}
 }
+
+func FuzzSQLTestName(f *testing.F) {
+	f.Add("simple_test_name")
+	f.Add("test_with_special_chars_!@#$%^&*()")
+	f.Add("test_with_numbers_123456")
+	f.Add("test_with_unicode_åß∂ƒ©˙∆˚¬")
+	f.Add("abcdefghijklmnopqrstuvwxyz _")
+	f.Add("abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ")
+	f.Add("abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789_")
+	f.Add("abcdefghijklmnopqrstuvwxyz ABCDEFGHIJKLMNOPQRSTUVWXYZ 0123456789 _")
+
+	f.Fuzz(func(t *testing.T, name string) {
+		if strings.IndexFunc(name, func(r rune) bool { return !unicode.IsPrint(r) }) != -1 {
+			t.Skip("skipping test with non-printable characters")
+		}
+		got := sqltest.SQLTestName(t)
+		if got == "" {
+			t.Errorf("SQLTestName returned an empty string for input %q", name)
+		}
+		if len(got) > 63 {
+			t.Errorf("SQLTestName returned a name longer than 63 characters: %q", got)
+		}
+	})
+}
+
 func TestMigrationLogs(t *testing.T) {
 	t.Parallel()
 

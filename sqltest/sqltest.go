@@ -4,9 +4,12 @@ package sqltest
 import (
 	"context"
 	"fmt"
+	"hash/fnv"
 	"io/fs"
+	"strconv"
 	"strings"
 	"testing"
+	"unicode"
 
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -285,8 +288,37 @@ func (m *Migration) dropDB(ctx context.Context) error {
 	return err
 }
 
-// SQLTestName normalizes a test name to a database name.
-// It lowercases the test name and converts / to underscore.
+const (
+	// identifierMaxLength for PostgreSQL.
+	// https://www.postgresql.org/docs/current/sql-syntax-lexical.html#SQL-SYNTAX-IDENTIFIERS
+	identifierMaxLength = 63
+
+	// dbNameHashLength small enough to mitigate exceeding the identifierMaxLength,
+	// and large enough to avoid collisions.
+	dbNameHashLength = 5
+)
+
+// SQLTestName takes a test name, normalizes it, and outputs a database name for usage.
+// The name is lowercase, stripped of invalid runes, and has '/' replaced with '__'.
+// Long test names are truncated and suffixed with a hash to fit PostgreSQL's identifier limit.
 func SQLTestName(t testing.TB) string {
-	return strings.ToLower(strings.ReplaceAll(t.Name(), "/", "_"))
+	name := strings.ReplaceAll(strings.Map(func(r rune) rune {
+		switch r = unicode.ToLower(r); {
+		case r == '_', r == '/', // Allow '/' so ReplaceAll can replace it with '__'.
+			'0' <= r && r <= '9',
+			r >= 'a' && r <= 'z':
+			return r
+		default:
+			return -1
+		}
+	}, t.Name()), "/", "__")
+	if len(name) > identifierMaxLength {
+		h := fnv.New32a()
+		// Hash the entire test.Name() to guarantee uniqueness,
+		// and use a hex base to tentatively avoid real words.
+		h.Write([]byte(t.Name())) //gosec:disable G104 -- This is a false positive
+		hash := strconv.FormatUint(uint64(h.Sum32()), 16)[:dbNameHashLength]
+		name = name[:identifierMaxLength-dbNameHashLength] + hash
+	}
+	return name
 }
